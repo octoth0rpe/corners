@@ -74,6 +74,17 @@ struct Shortcut: Identifiable {
         return copy
     }
 
+    /// Identifies the physical combo, so "cmd+enter" and "cmd+return" match.
+    /// Nil when the key isn't valid.
+    @MainActor var combo: String? {
+        KeyCodes.code(for: key).map { Self.combo(modifiers: modifiers, code: $0) }
+    }
+
+    static func combo(modifiers: Set<Modifier>, code: Int) -> String {
+        (Modifier.allCases.filter(modifiers.contains).map(\.rawValue) + [String(code)])
+            .joined(separator: "+")
+    }
+
     /// The `keys` string used in the config file, e.g. "cmd+shift+k".
     var keys: String {
         (Modifier.allCases.filter(modifiers.contains).map(\.rawValue) + [key])

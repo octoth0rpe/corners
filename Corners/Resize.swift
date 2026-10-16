@@ -29,7 +29,8 @@ import AppKit
 ///    which corner is arbitrary and Grow doesn't undo it exactly.
 ///
 /// Chosen: option 2, in `shrinksFullAxes(horizontal:vertical:)`. Revisit after
-/// living with it for a while.
+/// living with it for a while. ResizeTests pins this behavior, so switching
+/// makes the tests that cover full axes fail, showing what changed.
 enum Resize: String, CaseIterable, Hashable {
     case grow
     case shrink

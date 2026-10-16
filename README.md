@@ -31,6 +31,7 @@ banner until it's granted.
 | `make install`  | Release build; quit Corners, replace `~/Applications/Corners.app`, relaunch |
 | `make run`      | Debug build; quit Corners, launch it from `build/`                         |
 | `make release`  | Release build into `build/`                                                |
+| `make test`     | Run the unit tests (Grow/Shrink math, key names)                           |
 | `make cert`     | Create the "Corners Local Signing" certificate in the login keychain       |
 | `make project`  | Regenerate `Corners.xcodeproj` from `project.yml`                          |
 | `make clean`    | Remove `build/` and the generated project                                  |
@@ -128,7 +129,8 @@ a line short still counts):
   Grow undoes each step exactly.
 
 The last rule was a judgment call among four options. They're listed at the top of
-`Corners/Resize.swift`, along with how to switch.
+`Corners/Resize.swift`, along with how to switch. `make test` covers the chosen
+behavior, so after switching, the failing tests show exactly what changed.
 
 ### The Configure window
 
@@ -136,9 +138,21 @@ Each row has modifier toggles, a key button, and an action. Click the key button
 a key to record it. Hold modifiers while you press it to set the toggles too (`⌃⌘←`
 records `←` with ⌃ and ⌘); a bare key leaves the toggles alone. Esc cancels. Corners'
 own shortcuts are paused while recording, so you can record combos it already uses.
-Keypad keys and Escape can't be recorded. The action pop-up lists
-presets (halves, quarters, thirds, corners, maximize) and Grow/Shrink. Choose **Custom…** or click the
+Keypad keys and Escape can't be recorded.
+
+The action pop-up lists presets (halves, quarters, thirds, corners, maximize) and
+Grow/Shrink. Choose **Custom…** or click the
 screen thumbnail to draw any rectangle (snapped to 5%) or type exact percentages.
+
+A ⚠️ on a row means its shortcut may not work. Hover for the reason:
+- **Same keys as a row above.** macOS registers a combo once per app, so the first
+  row wins and this one is off.
+- **macOS also uses these keys** (System Settings → Keyboard → Keyboard Shortcuts:
+  Mission Control, Spaces, screenshots…). macOS's shortcut usually wins. The row stays
+  registered, so it starts working if you turn the macOS one off. This check can't see
+  every system shortcut (Spotlight's `⌘Space` isn't listed) or other apps' shortcuts:
+  macOS doesn't report those, and registering a taken combo doesn't fail.
+- **macOS refused these keys.** Rare, for the same reason.
 
 Edits from either side show up on the other. Edits in the Configure window rewrite the
 file, which replaces comments and formatting you added by hand. If the file has a
@@ -162,6 +176,8 @@ Corners/
 ├── ConfigureView.swift  Shortcut editor, position picker, permission banner
 ├── AboutView.swift
 └── Assets.xcassets      App icon PNGs and the menu bar template SVG
+CornersTests/            Unit tests for Resize and KeyCodes (make test). They compile
+                         those files directly, so running them doesn't launch Corners.
 ```
 
 `KeyCodes`, `FileWatcher`, `HotKeyManager` and the config round trip come from
@@ -206,7 +222,6 @@ log stream --level debug --predicate 'subsystem == "com.octoth0rpe.corners"'
 ## Ideas / not yet done
 
 - Move the window to the next screen
-- Warnings for duplicate shortcuts or combos macOS refuses
 - A `.icon` from Icon Composer for dark, tinted and Liquid Glass variants
 
 ## License

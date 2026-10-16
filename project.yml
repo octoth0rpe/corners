@@ -35,6 +35,9 @@ targets:
         LSUIElement: true # menu bar only, no Dock icon
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: © 2026 octoth0rpe
+    scheme:
+      testTargets:
+        - CornersTests
     entitlements:
       path: Corners/Corners.entitlements
       properties:
@@ -57,3 +60,19 @@ targets:
         # signs. Notarization rejects it, so keep it to Debug.
         Release:
           CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO
+
+  # Unit tests for the parts with no UI or Accessibility code. They compile
+  # those files directly instead of loading the app, so running them doesn't
+  # launch Corners (no permission prompt, hotkeys or config writes).
+  CornersTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - CornersTests
+      - Corners/Resize.swift
+      - Corners/KeyCodes.swift
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.octoth0rpe.corners.tests
+        CODE_SIGN_IDENTITY: "-"

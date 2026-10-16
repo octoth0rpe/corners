@@ -12,7 +12,7 @@ XCODEBUILD := xcodebuild -project Corners.xcodeproj -scheme Corners -derivedData
 	-destination 'platform=macOS,arch=$(shell uname -m)'
 
 .DEFAULT_GOAL := build
-.PHONY: project build release run install cert clean
+.PHONY: project build release run install test cert clean
 
 project: Corners.xcodeproj
 
@@ -25,6 +25,10 @@ build: project
 
 release: project
 	$(XCODEBUILD) -configuration Release build
+
+# Unit tests (CornersTests)
+test: project
+	$(XCODEBUILD) test
 
 # Debug build, launched from build/
 run: build

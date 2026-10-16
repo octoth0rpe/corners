@@ -48,13 +48,40 @@ final class ConfigStore {
         watcher = FileWatcher(url: fileURL) { [weak self] in self?.reload() }
     }
 
+    /// Shortcuts that aren't active, and why. Shown as warnings in the Configure window.
+    private(set) var problems: [Shortcut.ID: ShortcutProblem] = [:]
+
     private func registerHotKeys() {
-        hotKeys.register(hotKeysSuspended ? [] : shortcuts.filter(\.isComplete)) { shortcut in
+        guard !hotKeysSuspended else {
+            // Keep the last problems; they still describe the list being edited.
+            hotKeys.register([]) { _ in }
+            return
+        }
+
+        // macOS registers a combo once per app, so the first row with it wins.
+        var problems: [Shortcut.ID: ShortcutProblem] = [:]
+        var seen = Set<String>()
+        var unique: [Shortcut] = []
+        let system = HotKeyManager.systemCombos()
+        for shortcut in shortcuts where shortcut.isComplete {
+            guard let combo = shortcut.combo else { continue }
+            if seen.insert(combo).inserted {
+                unique.append(shortcut)
+                // Still registered: it starts working if the macOS shortcut is turned off.
+                if system.contains(combo) { problems[shortcut.id] = .systemShortcut }
+            } else {
+                problems[shortcut.id] = .duplicate
+            }
+        }
+
+        let refused = hotKeys.register(unique) { shortcut in
             switch shortcut.action {
             case let .place(placement): WindowMover.move(to: placement)
             case let .resize(resize): WindowMover.resize(resize)
             }
         }
+        for id in refused { problems[id] = .refused }
+        self.problems = problems
     }
 
     func restoreDefaults() {
@@ -89,3 +116,22 @@ final class ConfigStore {
 }
 
 private let log = Logger(subsystem: "com.octoth0rpe.corners", category: "config")
+
+/// Why a shortcut in the list isn't active.
+enum ShortcutProblem {
+    case duplicate
+    case systemShortcut
+    case refused
+
+    var message: String {
+        switch self {
+        case .duplicate:
+            "A row above uses the same keys, so this one is off."
+        case .systemShortcut:
+            "macOS also uses these keys, and its shortcut usually wins. Change them here, or turn "
+                + "off the macOS one in System Settings → Keyboard → Keyboard Shortcuts."
+        case .refused:
+            "macOS wouldn't register these keys. Another app or a system shortcut probably uses them."
+        }
+    }
+}
