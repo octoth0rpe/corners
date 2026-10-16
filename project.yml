@@ -1,0 +1,59 @@
+# XcodeGen spec. Run `xcodegen` (or `make project`) to produce Corners.xcodeproj.
+name: Corners
+options:
+  bundleIdPrefix: com.octoth0rpe
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+
+packages:
+  TOMLKit:
+    url: https://github.com/LebJe/TOMLKit
+    from: 0.6.0
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Corners:
+    type: application
+    platform: macOS
+    sources:
+      - Corners
+    dependencies:
+      - package: TOMLKit
+    info:
+      path: Corners/Info.plist
+      properties:
+        CFBundleName: Corners
+        CFBundleDisplayName: Corners
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        LSUIElement: true # menu bar only, no Dock icon
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: © 2026 octoth0rpe
+    entitlements:
+      path: Corners/Corners.entitlements
+      properties:
+        # Off: a sandboxed app can be granted Accessibility, but every call to
+        # another app still fails with kAXErrorCannotComplete.
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.octoth0rpe.corners
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
+        CODE_SIGN_STYLE: Automatic
+        # Ad-hoc signing so it builds without a developer account. `make install`
+        # re-signs the installed copy with a stable local identity (see `make cert`)
+        # so the Accessibility grant survives reinstalls.
+        # Set DEVELOPMENT_TEAM and remove this to sign for distribution.
+        CODE_SIGN_IDENTITY: "-"
+      configs:
+        # Xcode adds get-task-allow (lets a debugger attach) to every build it
+        # signs. Notarization rejects it, so keep it to Debug.
+        Release:
+          CODE_SIGN_INJECT_BASE_ENTITLEMENTS: NO

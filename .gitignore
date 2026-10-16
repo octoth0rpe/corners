@@ -1,0 +1,6 @@
+build/
+Corners.xcodeproj/
+Corners/Info.plist
+Corners/Corners.entitlements
+.DS_Store
+xcuserdata/
