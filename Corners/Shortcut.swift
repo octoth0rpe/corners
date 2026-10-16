@@ -37,12 +37,27 @@ enum Modifier: String, CaseIterable, Hashable {
     }
 }
 
+/// What a shortcut does to the frontmost window.
+enum Action: Hashable {
+    /// Move and resize it to a part of its screen.
+    case place(Placement)
+    /// Grow or shrink it a step, keeping flush edges in place.
+    case resize(Resize)
+
+    /// The preset or resize name, or nil for a custom placement.
+    var name: String? {
+        switch self {
+        case let .place(placement): Preset.matching(placement)?.name
+        case let .resize(resize): resize.name
+        }
+    }
+}
+
 struct Shortcut: Identifiable {
     var id = UUID()
     var modifiers: Set<Modifier> = [.control, .command]
     var key = ""
-    /// Where the frontmost window goes when the shortcut is pressed.
-    var placement = Preset.maximize.placement
+    var action = Action.place(Preset.maximize.placement)
 
     /// True when the shortcut can actually be registered.
     @MainActor var isComplete: Bool {
@@ -67,7 +82,7 @@ struct Shortcut: Identifiable {
 
     init() {}
 
-    init(keys: String, placement: Placement) throws {
+    init(keys: String, action: Action) throws {
         var parts = keys.split(separator: "+", omittingEmptySubsequences: false)
             .map { $0.trimmingCharacters(in: .whitespaces) }
         // A trailing "++" means the plus key itself, e.g. "cmd++".
@@ -83,12 +98,16 @@ struct Shortcut: Identifiable {
             }
             modifiers.insert(modifier)
         }
-        self.placement = placement
+        self.action = action
+    }
+
+    private init(_ keys: String, _ action: Action) {
+        // The defaults are known to parse.
+        try! self.init(keys: keys, action: action)
     }
 
     private init(_ keys: String, _ preset: Preset) {
-        // The defaults are known to parse.
-        try! self.init(keys: keys, placement: preset.placement)
+        self.init(keys, .place(preset.placement))
     }
 
     /// Written to config.toml on first launch, and by Restore Defaults.
@@ -103,6 +122,8 @@ struct Shortcut: Identifiable {
             Shortcut("ctrl+opt+shift+cmd+2", .centerHalf),
             Shortcut("ctrl+opt+shift+cmd+3", .rightQuarter),
             Shortcut("cmd+return", .maximize),
+            Shortcut("ctrl+cmd+=", .resize(.grow)),
+            Shortcut("ctrl+cmd+-", .resize(.shrink)),
         ]
     }
 }
@@ -111,6 +132,6 @@ extension Shortcut: Equatable {
     /// Compares content only, so reloading an unchanged file doesn't
     /// replace rows (and their identities) in the UI.
     static func == (a: Shortcut, b: Shortcut) -> Bool {
-        a.modifiers == b.modifiers && a.key == b.key && a.placement == b.placement
+        a.modifiers == b.modifiers && a.key == b.key && a.action == b.action
     }
 }

@@ -1,7 +1,8 @@
 # Corners
 
 A tiny macOS menu bar app that moves the frontmost window with global keyboard shortcuts.
-Press `⌃⌘←`, and the window fills the left half of its screen. Shortcuts live in a TOML
+Press `⌃⌘←`, and the window fills the left half of its screen. Press `⌃⌘=`, and it grows
+by 10% of the screen without leaving the edge it's against. Shortcuts live in a TOML
 file that Corners watches and hot-reloads, so you can edit them in the built-in Configure
 window or in your editor of choice.
 
@@ -72,6 +73,11 @@ frame = { x = 0, y = 0, width = 50, height = 100 }
 [[shortcut]]
 keys  = "ctrl+opt+shift+cmd+2"
 frame = { x = 25, y = 0, width = 50, height = 100 }
+
+# Grow 10%
+[[shortcut]]
+keys   = "ctrl+cmd+="
+resize = "grow"
 ```
 
 - **`keys`**: modifiers and one key joined with `+`.
@@ -86,6 +92,8 @@ frame = { x = 25, y = 0, width = 50, height = 100 }
   That's the screen minus the menu bar and Dock. `x` and `y` are measured from the
   top-left corner. `x + width` and `y + height` can be at most 100. Fractions work:
   `width = 33.333` is a third.
+- **`resize`**: instead of a `frame`, `"grow"` or `"shrink"`. Each press changes the window
+  by 10% of the screen on each axis. See [Grow and Shrink](#grow-and-shrink).
 
 ### Defaults
 
@@ -99,14 +107,33 @@ frame = { x = 25, y = 0, width = 50, height = 100 }
 | `⌃⌥⇧⌘2`   | Center half (25%–75%), full height      |
 | `⌃⌥⇧⌘3`   | Right quarter, full height              |
 | `⌘↩`      | Maximize                                |
+| `⌃⌘=`     | Grow 10%                                |
+| `⌃⌘-`     | Shrink 10%                              |
 
 `⌘↩` is "send" or "run" in many apps. Corners registers it globally, so those apps
 won't see it. Change it if that gets in the way.
 
+### Grow and Shrink
+
+Each press grows or shrinks the window by 10% of the screen's width and height. Edges
+flush with the screen stay where they are (within 20 points, so a terminal that stopped
+a line short still counts):
+
+- A left half grows to the right: 50% → 60% → 70% of the width. A right half grows to
+  the left. A corner window grows out of its corner.
+- A window touching no edge grows or shrinks evenly around its center.
+- Growing stops at the screen edges. Windows don't shrink below 10% of the screen.
+- An axis the window fills completely doesn't shrink, so a left half only gets
+  narrower. The exception is a maximized window, which shrinks evenly to 90% × 90%.
+  Grow undoes each step exactly.
+
+The last rule was a judgment call among four options. They're listed at the top of
+`Corners/Resize.swift`, along with how to switch.
+
 ### The Configure window
 
-Each row has modifier toggles, a key field, and a position. The position pop-up lists
-presets (halves, quarters, thirds, corners, maximize). Choose **Custom…** or click the
+Each row has modifier toggles, a key field, and an action. The action pop-up lists
+presets (halves, quarters, thirds, corners, maximize) and Grow/Shrink. Choose **Custom…** or click the
 screen thumbnail to draw any rectangle (snapped to 5%) or type exact percentages.
 
 Edits from either side show up on the other. Edits in the Configure window rewrite the
@@ -121,8 +148,9 @@ Corners/
 ├── CornersApp.swift     App entry: MenuBarExtra + About and Configure windows
 ├── ConfigStore.swift    Source of truth: load, save, reload, keep hotkeys in sync
 ├── ConfigFile.swift     TOML parse (TOMLKit) and render (hand-written for readability)
-├── Shortcut.swift       Shortcut and Modifier models, "cmd+shift+k" parsing, defaults
+├── Shortcut.swift       Shortcut, Action and Modifier models, "cmd+shift+k" parsing, defaults
 ├── Placement.swift      Placement (percent rectangle) and the presets
+├── Resize.swift         Grow/Shrink: anchoring math, no Accessibility code
 ├── WindowMover.swift    Moves the frontmost window via the Accessibility API
 ├── HotKeyManager.swift  Global hotkeys via Carbon RegisterEventHotKey
 ├── KeyCodes.swift       Key name → virtual key code, layout-aware via UCKeyTranslate
@@ -153,6 +181,9 @@ Summon and work the same way.
   so a left half and a right half always meet with no gap or overlap.
 - **The window stays on its screen.** The target screen is the one showing most of the
   window.
+- **Resizes realign.** If an app won't take the exact size (a minimum size, or a
+  terminal's character cells), the window is moved again so its anchored edge is still
+  flush.
 - **Size, move, size.** Apps can refuse a size that doesn't fit at the window's current
   position, so the size is set again once the window has moved. While moving,
   `AXEnhancedUserInterface` is switched off, because Chrome and Electron apps animate
@@ -170,7 +201,6 @@ log stream --level debug --predicate 'subsystem == "com.octoth0rpe.corners"'
 
 ## Ideas / not yet done
 
-- Nudge shortcuts: grow or shrink the window by 10%
 - Move the window to the next screen
 - A "record shortcut" field that captures the next key press
 - Warnings for duplicate shortcuts or combos macOS refuses

@@ -102,7 +102,7 @@ private struct ShortcutRow: View {
             Image(systemName: "arrow.right")
                 .foregroundStyle(.secondary)
 
-            PlacementPicker(placement: $shortcut.placement)
+            ActionPicker(action: $shortcut.action)
 
             Button("Delete", systemImage: "minus.circle", action: onDelete)
                 .labelStyle(.iconOnly)
@@ -121,28 +121,48 @@ private struct ShortcutRow: View {
     }
 }
 
-/// A pop-up of presets plus a thumbnail of the screen. Choosing Custom… or
-/// clicking the thumbnail opens an editor for any rectangle.
-private struct PlacementPicker: View {
-    @Binding var placement: Placement
+/// A pop-up of presets and resizes plus a thumbnail of the screen. Choosing
+/// Custom… or clicking the thumbnail opens an editor for any rectangle.
+private struct ActionPicker: View {
+    @Binding var action: Action
     @State private var isEditing = false
 
-    /// The matching preset's ID, or nil (Custom…) for anything else.
+    /// Pop-up tags: a preset's ID, "resize.grow" or "resize.shrink", or nil
+    /// (Custom…) for any other placement.
     private var selection: Binding<String?> {
         Binding {
-            Preset.matching(placement)?.id
-        } set: { id in
-            if let preset = Preset.all.first(where: { $0.id == id }) {
-                placement = preset.placement
+            switch action {
+            case let .place(placement): Preset.matching(placement)?.id
+            case let .resize(resize): Self.tag(for: resize)
+            }
+        } set: { tag in
+            if let preset = Preset.all.first(where: { $0.id == tag }) {
+                action = .place(preset.placement)
+            } else if let resize = Resize.allCases.first(where: { Self.tag(for: $0) == tag }) {
+                action = .resize(resize)
             } else {
                 isEditing = true
             }
         }
     }
 
+    /// The placement being edited. A resize has none, so Custom… starts from
+    /// the whole screen.
+    private var placement: Binding<Placement> {
+        Binding {
+            if case let .place(placement) = action { placement } else { Preset.maximize.placement }
+        } set: {
+            action = .place($0)
+        }
+    }
+
+    private static func tag(for resize: Resize) -> String {
+        "resize.\(resize.rawValue)"
+    }
+
     var body: some View {
         HStack(spacing: 8) {
-            Picker("Position", selection: selection) {
+            Picker("Action", selection: selection) {
                 ForEach(Preset.groups, id: \.self) { group in
                     Section {
                         ForEach(group) { preset in
@@ -156,6 +176,12 @@ private struct PlacementPicker: View {
                     }
                 }
                 Section {
+                    ForEach(Resize.allCases, id: \.self) { resize in
+                        Label(resize.name, systemImage: resize.systemImage)
+                            .tag(Optional(Self.tag(for: resize)))
+                    }
+                }
+                Section {
                     Text("Custom…").tag(String?.none)
                 }
             }
@@ -163,19 +189,42 @@ private struct PlacementPicker: View {
             // Fill the row, so every pop-up is the same width whatever it shows.
             .frame(maxWidth: .infinity)
 
-            Button {
-                isEditing = true
-            } label: {
-                PlacementThumbnail(placement: placement)
-                    .frame(width: 44, height: 28)
-                    .contentShape(Rectangle())
+            Group {
+                if case let .resize(resize) = action {
+                    ResizeThumbnail(resize: resize)
+                        .help("Edges flush with the screen stay in place")
+                } else {
+                    Button {
+                        isEditing = true
+                    } label: {
+                        PlacementThumbnail(placement: placement.wrappedValue)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help("Edit the position")
+                }
             }
-            .buttonStyle(.plain)
-            .help("Edit the position")
+            .frame(width: 44, height: 28)
             .popover(isPresented: $isEditing, arrowEdge: .bottom) {
-                PlacementEditor(placement: $placement)
+                PlacementEditor(placement: placement)
             }
         }
+    }
+}
+
+/// The screen thumbnail for Grow and Shrink: the resize symbol on a screen.
+private struct ResizeThumbnail: View {
+    let resize: Resize
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 4)
+            .fill(Color.tileSecondary)
+            .overlay {
+                Image(systemName: resize.systemImage)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.tilePrimary)
+            }
+            .accessibilityLabel(resize.name)
     }
 }
 

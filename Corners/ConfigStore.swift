@@ -11,7 +11,10 @@ final class ConfigStore {
         didSet {
             guard shortcuts != oldValue else { return }
             hotKeys.register(shortcuts.filter(\.isComplete)) { shortcut in
-                WindowMover.move(to: shortcut.placement)
+                switch shortcut.action {
+                case let .place(placement): WindowMover.move(to: placement)
+                case let .resize(resize): WindowMover.resize(resize)
+                }
             }
             if !isApplyingFile { save() }
         }

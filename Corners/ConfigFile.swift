@@ -4,6 +4,8 @@ import TOMLKit
 enum ConfigError: LocalizedError {
     case unknownModifier(String, in: String)
     case invalidFrame(in: String)
+    case missingAction(in: String)
+    case unknownResize(String, in: String)
 
     var errorDescription: String? {
         switch self {
@@ -12,6 +14,10 @@ enum ConfigError: LocalizedError {
         case let .invalidFrame(keys):
             "The frame for “\(keys)” doesn't fit on the screen. x + width and y + height "
                 + "can be at most 100, and width and height must be more than 0."
+        case let .missingAction(keys):
+            "The shortcut “\(keys)” needs either a frame or a resize, but not both."
+        case let .unknownResize(value, keys):
+            "Unknown resize “\(value)” in “\(keys)”. Use grow or shrink."
         }
     }
 }
@@ -21,6 +27,10 @@ enum ConfigError: LocalizedError {
 ///     [[shortcut]]
 ///     keys  = "ctrl+cmd+left"
 ///     frame = { x = 0, y = 0, width = 50, height = 100 }
+///
+///     [[shortcut]]
+///     keys   = "ctrl+cmd+="
+///     resize = "grow"
 enum ConfigFile {
     private struct File: Decodable {
         var shortcut: [Entry]?
@@ -28,7 +38,8 @@ enum ConfigFile {
 
     private struct Entry: Decodable {
         var keys: String
-        var frame: Frame
+        var frame: Frame?
+        var resize: String?
     }
 
     private struct Frame: Decodable {
@@ -57,10 +68,23 @@ enum ConfigFile {
     static func parse(_ text: String) throws -> [Shortcut] {
         let file = try TOMLDecoder().decode(File.self, from: text)
         return try (file.shortcut ?? []).map { entry in
-            let f = entry.frame
+            try Shortcut(keys: entry.keys, action: action(for: entry))
+        }
+    }
+
+    private static func action(for entry: Entry) throws -> Action {
+        switch (entry.frame, entry.resize) {
+        case let (f?, nil):
             let placement = Placement(x: f.x, y: f.y, width: f.width, height: f.height)
             guard placement.isValid else { throw ConfigError.invalidFrame(in: entry.keys) }
-            return try Shortcut(keys: entry.keys, placement: placement)
+            return .place(placement)
+        case let (nil, name?):
+            guard let resize = Resize(rawValue: name) else {
+                throw ConfigError.unknownResize(name, in: entry.keys)
+            }
+            return .resize(resize)
+        default:
+            throw ConfigError.missingAction(in: entry.keys)
         }
     }
 
@@ -78,6 +102,8 @@ enum ConfigFile {
             # frame: where the frontmost window goes, in percent of the usable area
             #        of the screen it's on (not counting the menu bar and Dock).
             #        x and y are measured from the top-left corner.
+            # resize: instead of a frame, "grow" or "shrink" the window by 10% of
+            #        the screen. Edges flush with the screen stay where they are.
             #
             # [[shortcut]]
             # keys  = "ctrl+cmd+left"
@@ -85,17 +111,26 @@ enum ConfigFile {
 
             """
         for shortcut in shortcuts {
-            let p = shortcut.placement
             out += "\n"
-            if let preset = Preset.matching(p) {
-                out += "# \(preset.name)\n"
+            if let name = shortcut.action.name {
+                out += "# \(name)\n"
             }
-            out += """
-                [[shortcut]]
-                keys  = \(quote(shortcut.keys))
-                frame = { x = \(number(p.x)), y = \(number(p.y)), width = \(number(p.width)), height = \(number(p.height)) }
+            switch shortcut.action {
+            case let .place(p):
+                out += """
+                    [[shortcut]]
+                    keys  = \(quote(shortcut.keys))
+                    frame = { x = \(number(p.x)), y = \(number(p.y)), width = \(number(p.width)), height = \(number(p.height)) }
 
-                """
+                    """
+            case let .resize(resize):
+                out += """
+                    [[shortcut]]
+                    keys   = \(quote(shortcut.keys))
+                    resize = \(quote(resize.rawValue))
+
+                    """
+            }
         }
         return out
     }
