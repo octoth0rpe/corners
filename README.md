@@ -132,7 +132,11 @@ The last rule was a judgment call among four options. They're listed at the top 
 
 ### The Configure window
 
-Each row has modifier toggles, a key field, and an action. The action pop-up lists
+Each row has modifier toggles, a key button, and an action. Click the key button and press
+a key to record it. Hold modifiers while you press it to set the toggles too (`⌃⌘←`
+records `←` with ⌃ and ⌘); a bare key leaves the toggles alone. Esc cancels. Corners'
+own shortcuts are paused while recording, so you can record combos it already uses.
+Keypad keys and Escape can't be recorded. The action pop-up lists
 presets (halves, quarters, thirds, corners, maximize) and Grow/Shrink. Choose **Custom…** or click the
 screen thumbnail to draw any rectangle (snapped to 5%) or type exact percentages.
 
@@ -202,7 +206,6 @@ log stream --level debug --predicate 'subsystem == "com.octoth0rpe.corners"'
 ## Ideas / not yet done
 
 - Move the window to the next screen
-- A "record shortcut" field that captures the next key press
 - Warnings for duplicate shortcuts or combos macOS refuses
 - A `.icon` from Icon Composer for dark, tinted and Liquid Glass variants
 

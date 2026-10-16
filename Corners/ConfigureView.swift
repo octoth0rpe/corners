@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import ServiceManagement
 import SwiftUI
 
@@ -5,6 +6,7 @@ struct ConfigureView: View {
     @Environment(ConfigStore.self) private var store
     @State private var isTrusted = AccessibilityPermission.isTrusted
     @State private var isConfirmingRestore = false
+    @State private var recorder = KeyRecorder()
 
     var body: some View {
         @Bindable var store = store
@@ -24,9 +26,11 @@ struct ConfigureView: View {
             } else {
                 List {
                     ForEach($store.shortcuts) { $shortcut in
-                        ShortcutRow(shortcut: $shortcut) {
-                            store.shortcuts.removeAll { $0.id == shortcut.id }
-                        }
+                        ShortcutRow(
+                            shortcut: $shortcut,
+                            isRecording: recorder.recordingID == shortcut.id,
+                            onRecord: { recorder.toggle(shortcut.id, in: store) },
+                            onDelete: { store.shortcuts.removeAll { $0.id == shortcut.id } })
                     }
                     .onDelete { store.shortcuts.remove(atOffsets: $0) }
                     .onMove { store.shortcuts.move(fromOffsets: $0, toOffset: $1) }
@@ -49,6 +53,7 @@ struct ConfigureView: View {
             .padding(12)
         }
         .frame(minWidth: 640, minHeight: 260)
+        .onDisappear { recorder.stop() }
         .confirmationDialog("Restore the default shortcuts?", isPresented: $isConfirmingRestore) {
             Button("Restore Defaults", role: .destructive) { store.restoreDefaults() }
         } message: {
@@ -65,12 +70,96 @@ struct ConfigureView: View {
     }
 }
 
+/// Listens for the next key press for one row at a time, with Corners'
+/// own hotkeys paused so combos like ⌃⌘← reach it instead of moving a window.
+@MainActor @Observable
+private final class KeyRecorder {
+    private(set) var recordingID: Shortcut.ID?
+
+    @ObservationIgnored private weak var store: ConfigStore?
+    @ObservationIgnored private var monitor: Any?
+    @ObservationIgnored private var resignObserver: (any NSObjectProtocol)?
+
+    func toggle(_ id: Shortcut.ID, in store: ConfigStore) {
+        if recordingID == id {
+            stop()
+        } else {
+            start(id, in: store)
+        }
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        if let resignObserver { NotificationCenter.default.removeObserver(resignObserver) }
+        monitor = nil
+        resignObserver = nil
+        recordingID = nil
+        store?.hotKeysSuspended = false
+    }
+
+    private func start(_ id: Shortcut.ID, in store: ConfigStore) {
+        stop()
+        self.store = store
+        recordingID = id
+        store.hotKeysSuspended = true
+        // Local monitors run on the main thread, before the event reaches any view.
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            MainActor.assumeIsolated { self?.record(event) }
+            return nil
+        }
+        // Key presses in other apps never arrive here, so don't leave the
+        // hotkeys paused if the user switches away.
+        resignObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didResignActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.stop() }
+        }
+    }
+
+    private func record(_ event: NSEvent) {
+        let code = Int(event.keyCode)
+        if code == kVK_Escape {
+            stop()
+            return
+        }
+        guard let key = KeyCodes.name(forCode: code) else {
+            // A keypad key, or one that types nothing.
+            NSSound.beep()
+            return
+        }
+        if let store, let index = store.shortcuts.firstIndex(where: { $0.id == recordingID }) {
+            store.shortcuts[index].key = key
+            // Held modifiers become the combo; a bare key keeps the toggles as they are.
+            let modifiers = Self.modifiers(event.modifierFlags)
+            if !modifiers.isEmpty { store.shortcuts[index].modifiers = modifiers }
+        }
+        stop()
+    }
+
+    private static func modifiers(_ flags: NSEvent.ModifierFlags) -> Set<Modifier> {
+        var modifiers = Set<Modifier>()
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        if flags.contains(.command) { modifiers.insert(.command) }
+        return modifiers
+    }
+}
+
 private struct ShortcutRow: View {
     @Binding var shortcut: Shortcut
+    let isRecording: Bool
+    let onRecord: () -> Void
     let onDelete: () -> Void
 
     private var keyIsInvalid: Bool {
         !shortcut.key.isEmpty && KeyCodes.code(for: shortcut.key) == nil
+    }
+
+    private var keyLabel: String {
+        if isRecording { return "Press a key…" }
+        if shortcut.key.isEmpty { return "Record Key" }
+        return KeyCodes.displayName(for: shortcut.key)
     }
 
     var body: some View {
@@ -86,18 +175,21 @@ private struct ShortcutRow: View {
                     .help(modifier.name)
             }
 
-            TextField("Key", text: $shortcut.key)
-                .onChange(of: shortcut.key) { shortcut = shortcut.normalized }
-                .frame(width: 72)
-                .multilineTextAlignment(.center)
-                .overlay {
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(.red, lineWidth: 1)
-                        .opacity(keyIsInvalid ? 1 : 0)
-                }
-                .help(keyIsInvalid
-                      ? "Unknown key. Use a single character or a name like space, return, left or f5."
-                      : "A single character, or a name like space, return, left or f5")
+            Button(action: onRecord) {
+                Text(keyLabel)
+                    .foregroundStyle(isRecording || shortcut.key.isEmpty ? .secondary : .primary)
+                    .frame(width: 84)
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isRecording ? Color.accentColor : .red, lineWidth: isRecording ? 2 : 1)
+                    .opacity(isRecording || keyIsInvalid ? 1 : 0)
+            }
+            .help(isRecording
+                  ? "Press the key for this shortcut, with modifiers if you like. Esc cancels."
+                  : keyIsInvalid
+                  ? "Unknown key “\(shortcut.key)” in config.toml. Click to record a new one."
+                  : "Click, then press a key to use it")
 
             Image(systemName: "arrow.right")
                 .foregroundStyle(.secondary)

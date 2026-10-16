@@ -24,21 +24,54 @@ enum KeyCodes {
         return layoutMap(shift: false).first { $0.value == code }?.key
     }
 
-    private static let named: [String: Int] = {
-        var map: [String: Int] = [
-            "space": kVK_Space, "return": kVK_Return, "enter": kVK_Return, "tab": kVK_Tab,
-            "escape": kVK_Escape, "esc": kVK_Escape,
-            "delete": kVK_Delete, "backspace": kVK_Delete, "forwarddelete": kVK_ForwardDelete,
-            "up": kVK_UpArrow, "down": kVK_DownArrow, "left": kVK_LeftArrow, "right": kVK_RightArrow,
-            "home": kVK_Home, "end": kVK_End, "pageup": kVK_PageUp, "pagedown": kVK_PageDown,
+    /// The config name for a key code: a name like "left" or "f5", or the
+    /// character the key types on the current layout. Nil for keypad keys and
+    /// keys that type nothing.
+    static func name(forCode code: Int) -> String? {
+        if let name = canonicalNames[code] { return name }
+        guard !keypad.contains(code) else { return nil }
+        return layoutMap(shift: false).first { $0.value == code }?.key
+    }
+
+    /// How a key is shown in the Configure window: symbols for named keys
+    /// ("←", "↩", "⌫"), "F5", "Space", and characters uppercased.
+    static func displayName(for key: String) -> String {
+        let key = key.lowercased()
+        guard let code = named[key], let name = canonicalNames[code] else { return key.uppercased() }
+        return symbols[name] ?? name.uppercased()
+    }
+
+    /// One name per named key, used when writing a key back out.
+    private static let canonicalNames: [Int: String] = {
+        var map = [
+            kVK_Space: "space", kVK_Return: "return", kVK_Tab: "tab", kVK_Escape: "escape",
+            kVK_Delete: "delete", kVK_ForwardDelete: "forwarddelete",
+            kVK_UpArrow: "up", kVK_DownArrow: "down", kVK_LeftArrow: "left", kVK_RightArrow: "right",
+            kVK_Home: "home", kVK_End: "end", kVK_PageUp: "pageup", kVK_PageDown: "pagedown",
         ]
         let functionKeys = [
             kVK_F1, kVK_F2, kVK_F3, kVK_F4, kVK_F5, kVK_F6, kVK_F7, kVK_F8, kVK_F9, kVK_F10,
             kVK_F11, kVK_F12, kVK_F13, kVK_F14, kVK_F15, kVK_F16, kVK_F17, kVK_F18, kVK_F19, kVK_F20,
         ]
-        for (i, code) in functionKeys.enumerated() { map["f\(i + 1)"] = code }
+        for (i, code) in functionKeys.enumerated() { map[code] = "f\(i + 1)" }
         return map
     }()
+
+    /// Canonical names plus aliases accepted in the config file.
+    private static let named: [String: Int] = {
+        var map = Dictionary(uniqueKeysWithValues: canonicalNames.map { ($1, $0) })
+        map["enter"] = kVK_Return
+        map["esc"] = kVK_Escape
+        map["backspace"] = kVK_Delete
+        return map
+    }()
+
+    private static let symbols: [String: String] = [
+        "space": "Space", "return": "↩", "tab": "⇥", "escape": "⎋",
+        "delete": "⌫", "forwarddelete": "⌦",
+        "up": "↑", "down": "↓", "left": "←", "right": "→",
+        "home": "↖", "end": "↘", "pageup": "⇞", "pagedown": "⇟",
+    ]
 
     /// Keypad keys type the same characters as main-keyboard keys ("+", "1"),
     /// so they're left out of the lookup to keep shortcuts on the main keyboard.
