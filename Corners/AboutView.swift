@@ -5,7 +5,9 @@ struct AboutView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Image(nsImage: NSApp.applicationIconImage)
+            // Not NSApp.applicationIconImage: an appiconset has no dark variant,
+            // and this image set does.
+            Image("AboutIcon")
                 .resizable()
                 .frame(width: 128, height: 128)
             Text("Corners")
