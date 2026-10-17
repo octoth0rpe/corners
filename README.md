@@ -11,11 +11,15 @@ window or in your editor of choice.
 - Needs Accessibility permission to move other apps' windows; not sandboxed (see below)
 - One dependency: [TOMLKit](https://github.com/LebJe/TOMLKit)
 
+`main` is always the latest release.
+
 ## Quick start
 
 Requirements: Xcode 26+ and [XcodeGen](https://github.com/yonaskolb/XcodeGen) (`brew install xcodegen`).
 
 ```sh
+git clone https://github.com/octoth0rpe/corners.git
+cd corners
 make cert       # once: create a local signing certificate (see below)
 make install    # build Release, replace ~/Applications/Corners.app, relaunch
 ```
